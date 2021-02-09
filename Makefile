@@ -34,8 +34,7 @@ CGO    := $(CGOENV) go
 GOTEST := TEST_USE_EXISTING_CLUSTER=false NO_PROXY="${NO_PROXY},testhost" go test
 SHELL    := bash
 
-PACKAGE_LIST := go list ./... | grep -vE "chaos-mesh/test|pkg/ptrace|zz_generated|vendor"
-PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/chaos-mesh/chaos-mesh/||'
+PACKAGE_LIST := echo $$(go list ./... | grep -vE "chaos-mesh/test|pkg/ptrace|zz_generated|vendor") github.com/chaos-mesh/chaos-mesh/api/v1alpha1
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
@@ -133,8 +132,9 @@ install: manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 config: $(GOBIN)/controller-gen
-	$< $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	$< $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=helm/chaos-mesh/crds
+	cd ./api/v1alpha1 ;\
+		$< $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config=../../config/crd/bases ;\
+		$< $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config=../../helm/chaos-mesh/crds ;
 
 # Run go fmt against code
 fmt: groupimports
@@ -299,6 +299,7 @@ $(eval $(call IMAGE_TEMPLATE,e2e-helper,test/cmd/e2e_helper))
 $(eval $(call IMAGE_TEMPLATE,chaos-mesh-protoc,hack/protoc))
 $(eval $(call IMAGE_TEMPLATE,chaos-mesh-e2e,test/image/e2e))
 $(eval $(call IMAGE_TEMPLATE,chaos-kernel,images/chaos-kernel))
+$(eval $(call IMAGE_TEMPLATE,chaos-jvm,images/chaos-jvm))
 
 binary: $(BINARIES)
 
@@ -333,10 +334,13 @@ chaos-build: bin/chaos-builder
 
 # Generate code
 generate: $(GOBIN)/controller-gen chaos-build
-	$< object:headerFile=./hack/boilerplate/boilerplate.generatego.txt paths="./..."
+	cd ./api/v1alpha1 ;\
+		$< object:headerFile=../../hack/boilerplate/boilerplate.generatego.txt paths="./..." ;
 
 manifests/crd.yaml: config ensure-kustomize
 	$(KUSTOMIZE_BIN) build config/default > manifests/crd.yaml
+
+yaml: manifests/crd.yaml
 
 # Generate Go files from Chaos Mesh proto files.
 ifeq ($(IN_DOCKER),1)
